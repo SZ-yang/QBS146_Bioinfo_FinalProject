@@ -1,0 +1,4 @@
+difficulty,sim_path,truth_csv,moran_csv,geary_csv,theta,n_cells,n_genes,n_perms,moran_pval_col_used,geary_pval_col_used
+easy,./sim_datasets/sim_easy.h5ad,./results/sim/ground_truth/truth_easy.csv,./results/sim/moran_geary/easy_moran_per_gene.csv,./results/sim/moran_geary/easy_geary_per_gene.csv,5.0,9560,300,1000,pval_sim,pval_sim
+medium,./sim_datasets/sim_medium.h5ad,./results/sim/ground_truth/truth_medium.csv,./results/sim/moran_geary/medium_moran_per_gene.csv,./results/sim/moran_geary/medium_geary_per_gene.csv,5.0,9560,300,1000,pval_sim,pval_sim
+hard,./sim_datasets/sim_hard.h5ad,./results/sim/ground_truth/truth_hard.csv,./results/sim/moran_geary/hard_moran_per_gene.csv,./results/sim/moran_geary/hard_geary_per_gene.csv,5.0,9560,300,1000,pval_sim,pval_sim
