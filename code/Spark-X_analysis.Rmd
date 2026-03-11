@@ -1,0 +1,148 @@
+---
+title: "Bioinformatic HW"
+output: html_document
+date: "2026-02-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(anndata)
+library(SPARK)
+library(dplyr)
+easydata <- read_h5ad("/sim_easy.h5ad")
+mediumdata<- read_h5ad("/sim_medium.h5ad")
+harddata<- read_h5ad("/sim_hard.h5ad")
+dim(easydata)
+dim(mediumdata)
+dim(harddata)
+counts1 <- as.matrix(easydata$X)
+coords1 <- easydata$obsm[["spatial"]]
+
+counts2 <- as.matrix(mediumdata$X)
+coords2 <- mediumdata$obsm[["spatial"]]
+
+counts3 <- as.matrix(harddata$X)
+coords3 <- harddata$obsm[["spatial"]]
+
+```
+
+
+```{r}
+datasets <- list(
+  easy   = list(counts = counts1, coords = coords1),
+  medium = list(counts = counts2, coords = coords2),
+  hard   = list(counts = counts3, coords = coords3)
+)
+
+results <- lapply(names(datasets), function(name) {
+  counts_filtered <- datasets[[name]]$counts[, colSums(datasets[[name]]$counts > 0) >= 10]
+  
+  res <- sparkx(
+    count_in = t(counts_filtered),
+    locus_in = datasets[[name]]$coords,
+    numCores = 1,
+    option = "mixture",
+    verbose = TRUE
+  )
+  
+  all_res <- res$res_mtest %>% arrange(adjustedPval)
+  write.csv(all_res,        paste0("sparkx_all_",   name, ".csv"))
+  write.csv(head(all_res, 10), paste0("sparkx_top10_", name, ".csv"))
+  
+  cat("===", name, "- SVG count:", nrow(all_res[all_res$adjustedPval < 0.05, ]), "===\n")
+  print(head(all_res, 10))
+  
+  return(all_res)
+})
+
+names(results) <- names(datasets)
+```
+
+```{r}
+library(ggplot2)
+library(gridExtra)
+
+plot_spatial <- function(coords, counts, gene_name, title) {
+  df <- data.frame(
+    x = coords[,1],
+    y = coords[,2],
+    expr = counts[, gene_name]
+  )
+  ggplot(df, aes(x, y, color=expr)) +
+    geom_point(size=0.5) +
+    scale_color_viridis_c(option = "magma") +
+    ggtitle(paste(title, "-", gene_name)) +
+    theme_void() +
+    theme(plot.title = element_text(hjust=0.5))
+}
+
+top_genes1 <- rownames(svg1[order(svg1$adjustedPval), ])[1:6]
+top_genes2 <- rownames(svg2[order(svg2$adjustedPval), ])[1:6]
+top_genes3 <- rownames(svg3[order(svg3$adjustedPval), ])[1:6]
+
+plots1 <- lapply(top_genes1, function(g) plot_spatial(coords1, counts1_filtered, g, "Easy"))
+plots2 <- lapply(top_genes2, function(g) plot_spatial(coords2, counts2_filtered, g, "Medium"))
+plots3 <- lapply(top_genes3, function(g) plot_spatial(coords3, counts3_filtered, g, "Hard"))
+
+# export
+save_grid <- function(plots, filename, title) {
+  p <- arrangeGrob(grobs=plots, ncol=3, top=title)
+  ggsave(filename, plot=p, width=15, height=10, dpi=300)
+  message("Saved: ", filename)
+}
+
+save_grid(plots1, "spatial_easy.png",   "Easy Dataset - Top 6 SVGs")
+save_grid(plots2, "spatial_medium.png", "Medium Dataset - Top 6 SVGs")
+save_grid(plots3, "spatial_hard.png",   "Hard Dataset - Top 6 SVGs")
+```
+
+```{r}
+realdata<- read_h5ad("/Users/liannechen/Downloads/h5ad/2024_xenium_breast_tTMA1.h5ad")
+# Subset to core 168
+idx <- which(realdata$obs$core == 168)
+counts_real <- as.matrix(realdata$X)[idx, ]
+coords_real <- realdata$obsm[["spatial"]][idx, ]
+
+# Filter genes expressed in at least 10 cells
+counts_real_filtered <- counts_real[, colSums(counts_real > 0) >= 10]
+
+# Run SPARKX
+sparkx_real <- sparkx(
+  count_in = t(counts_real_filtered),
+  locus_in = coords_real,
+  numCores = 1,
+  option = "mixture",
+  verbose = TRUE
+)
+
+# Extract SVG results
+all_results_real <- sparkx_real$res_mtest %>% arrange(adjustedPval)
+svg_real <- all_results_real[all_results_real$adjustedPval < 0.05, ]
+cat("SVG count:", nrow(svg_real), "\n")
+
+# Save tables
+write.csv(all_results_real,           "sparkx_all_real_core168.csv")
+write.csv(head(all_results_real, 10), "sparkx_top10_real_core168.csv")
+
+# Spatial expression plot function
+plot_spatial <- function(coords, counts, gene_name, title) {
+  df <- data.frame(x = coords[,1], y = coords[,2], expr = counts[, gene_name])
+  ggplot(df, aes(x, y, color=expr)) +
+    geom_point(size=0.5) +
+    scale_color_viridis_c(option = "magma") +
+    ggtitle(paste(title, "-", gene_name)) +
+    theme_void() +
+    theme(plot.title = element_text(hjust=0.5))
+}
+
+# Plot top 6 SVGs and export
+top_genes_real <- rownames(all_results_real)[1:6]
+plots_real <- lapply(top_genes_real, function(g) plot_spatial(coords_real, counts_real_filtered, g, "Core 168"))
+
+p <- arrangeGrob(grobs=plots_real, ncol=3, top="Real Data Core 168 - Top 6 SVGs")
+ggsave("spatial_real_core168.png", plot=p, width=15, height=10, dpi=300)
+message("Saved: spatial_real_core168.png")
+```
